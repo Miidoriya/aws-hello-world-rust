@@ -5,3 +5,4 @@ https://docs.aws.amazon.com/sdk-for-rust/latest/dg/getting-started.html
 _Further Reading_:
 - Using profiles with AWS SDK: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html
 - tokio: https://crates.io/crates/tokio
+- Rust based lambdas: https://github.com/awslabs/aws-lambda-rust-runtime#deployment
