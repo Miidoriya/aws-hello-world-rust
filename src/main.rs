@@ -1,25 +1,27 @@
+use std::error::Error;
+
 use lambda_runtime::{handler_fn, service_fn};
 use log::{error, info};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 struct Request {
     pub body: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize)]
 struct SuccessResponse {
     pub body: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize)]
 struct FailureResponse {
     pub body: String,
 }
 
 // Implement Display for the Failure response so that we can then implement Error.
 impl std::fmt::Display for FailureResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.body)
     }
 }
@@ -32,7 +34,7 @@ type Response = Result<SuccessResponse, FailureResponse>;
 
 #[tokio::main]
 async fn main() -> Result<(), lambda_runtime::Error> {
-    let func = service_fn(handler);
+    let func = handler_fn(handler);
     lambda_runtime::run(func).await?;
 
     Ok(())
@@ -59,25 +61,26 @@ async fn handler(req: Request, _ctx: lambda_runtime::Context) -> Response {
         .send()
         .await
         .map_err(|err| {
+            // In case of failure, log a detailed error to CloudWatch.
             error!(
                 "failed to upload file '{}' to S3 with error: {}",
                 &filename, err
             );
             // The sender of the request receives this message in response.
             FailureResponse {
-                body: "The lambda encountered an error and your message was not saved.".to_owned(),
+                body: "The lambda encountered an error and your message was not saved".to_owned(),
             }
         })?;
 
     info!(
-        "Successfully stored the inoming request in S3 with the name '{}'",
+        "Successfully stored the incoming request in S3 with the name '{}'",
         &filename
     );
 
     Ok(SuccessResponse {
         body: format!(
-            "the lambda has successfully stored your request in S3 with the name '{}'",
-            &filename
+            "the lambda has successfully stored the your request in S3 with name '{}'",
+            filename
         ),
     })
 }
