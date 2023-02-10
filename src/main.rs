@@ -1,24 +1,84 @@
-use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_dynamodb::{Client, Error};
+use lambda_runtime::{service_fn, LambdaEvent};
+use log::{error, info};
+use serde::{Deserialize, Serialize};
 
-/// Lists your DynamoDB Tables in the default Region or us-east-1 if a default Region isn't set.
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
-    let config = aws_config::from_env().region(region_provider).load().await;
-    let client = Client::new(&config);
+#[derive(Deserialize)]
+struct Request {
+    pub body: String,
+}
 
-    let resp = client.list_tables().send().await?;
+#[derive(Debug, Serialize)]
+struct SuccessResponse {
+    pub body: String,
+}
 
-    println!("Tables:");
+#[derive(Debug, Serialize)]
+struct FailureResponse {
+    pub body: String,
+}
 
-    let names = resp.table_names().unwrap_or_default();
-    for name in names {
-        println!("  {}", name);
+// Implement Display for the Failure response so that we can then implement Error.
+impl std::fmt::Display for FailureResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.body)
     }
+}
 
-    println!();
-    println!("Found {} tables.", names.len());
+// Implement Error for the FailureResponse so that we can `?` (try) the Response
+// returned by `lambda_runtime::run(func).await` in `fn main`.
+impl std::error::Error for FailureResponse {}
+
+type Response = Result<SuccessResponse, FailureResponse>;
+
+#[tokio::main]
+async fn main() -> Result<(), lambda_runtime::Error> {
+    let func = service_fn(handler);
+    lambda_runtime::run(func).await?;
 
     Ok(())
+}
+
+async fn handler(event: LambdaEvent<Request>) -> Response {
+    info!("handling a request...");
+    let bucket_name = std::env::var("BUCKET_NAME")
+        .expect("A BUCKET_NAME must be set in this app's Lambda environment variables.");
+
+    // No extra configuration is needed as long as your Lambda has
+    // the necessary permissions attached to its role.
+    let config = aws_config::load_from_env().await;
+    let s3_client = aws_sdk_s3::Client::new(&config);
+    // Generate a filename based on when the request was received.
+    let filename = format!("{}.txt", time::OffsetDateTime::now_utc().unix_timestamp());
+
+    let _ = s3_client
+        .put_object()
+        .bucket(bucket_name)
+        .body(event.payload.body.as_bytes().to_owned().into())
+        .key(&filename)
+        .content_type("text/plain")
+        .send()
+        .await
+        .map_err(|err| {
+            // In case of failure, log a detailed error to CloudWatch.
+            error!(
+                "failed to upload file '{}' to S3 with error: {}",
+                &filename, err
+            );
+            // The sender of the request receives this message in response.
+            FailureResponse {
+                body: "The lambda encountered an error and your message was not saved".to_owned(),
+            }
+        })?;
+
+    info!(
+        "Successfully stored the incoming request in S3 with the name '{}'",
+        &filename
+    );
+
+    Ok(SuccessResponse {
+        body: format!(
+            "the lambda has successfully stored the your request in S3 with name '{}'",
+            filename
+        ),
+    })
 }
