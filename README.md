@@ -7,7 +7,7 @@ _Further Reading_:
 - tokio: https://crates.io/crates/tokio
 - Rust based lambdas: https://github.com/awslabs/aws-lambda-rust-runtime#deployment
 - Using the AWS SDK for Rust in AWS Lambda
-
+- Cargo Lambda - https://www.cargo-lambda.info/guide/getting-started.html
 ```
 Required on Mac
 
@@ -19,4 +19,10 @@ export CC_x86_64_unknown_linux_musl=x86_64-unknown-linux-musl-gcc
 export CXX_x86_64_unknown_linux_musl=x86_64-unknown-linux-musl-g++
 export AR_x86_64_unknown_linux_musl=x86_64-unknown-linux-musl-ar
 export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=x86_64-unknown-linux-musl-gcc
+```
+
+Local development:
+```
+cargo lambda watch
+cargo lambda invoke --data-ascii '{"body": "hi"}'
 ```
